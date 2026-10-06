@@ -22,7 +22,7 @@ class PlaylistIteradorTest {
 
     @BeforeEach
     void setUp() {
-        playlist = new Playlist("Teste");
+        playlist = new Playlist();
         for (int i = 1; i <= 6; i++) { // passa da capacidade inicial do array (4)
             Faixa faixa = new Faixa("Faixa " + i, "Artista", 100 + i, i % 2 == 0);
             playlist.adicionar(faixa);
@@ -71,7 +71,7 @@ class PlaylistIteradorTest {
 
     @Test
     void proximaSemElementosLancaExcecao() {
-        Iterador<Faixa> vazio = new Playlist("Vazia").criarIterador();
+        Iterador<Faixa> vazio = new Playlist().criarIterador();
         assertFalse(vazio.temProxima());
         assertThrows(NoSuchElementException.class, vazio::proxima);
         assertThrows(NoSuchElementException.class,

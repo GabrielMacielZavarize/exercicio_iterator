@@ -1,7 +1,6 @@
 package br.venson.net.designpatterns.iterator;
 
 public class Faixa {
-
     private final String titulo;
     private final String artista;
     private final int duracaoSegundos;
@@ -32,6 +31,6 @@ public class Faixa {
 
     @Override
     public String toString() {
-        return titulo + " - " + artista + (favorita ? " ♥" : "");
+        return titulo + " - " + artista;
     }
 }

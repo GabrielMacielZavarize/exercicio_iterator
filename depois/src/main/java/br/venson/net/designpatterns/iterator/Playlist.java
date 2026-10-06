@@ -4,26 +4,13 @@ import java.util.Arrays;
 import java.util.Random;
 
 /**
- * Agregado concreto. A estrutura interna (aqui, um array que cresce sob demanda)
- * é totalmente privada: os clientes só recebem iteradores.
+ * Agregado concreto. A estrutura interna (aqui, um array que cresce sob demanda,
+ * no lugar da List original) é totalmente privada: os clientes só recebem iteradores.
  */
 public class Playlist implements Agregado<Faixa> {
 
-    private final String nome;
     private Faixa[] faixas = new Faixa[4];
     private int tamanho = 0;
-
-    public Playlist(String nome) {
-        this.nome = nome;
-    }
-
-    public String getNome() {
-        return nome;
-    }
-
-    public int tamanho() {
-        return tamanho;
-    }
 
     public void adicionar(Faixa faixa) {
         if (tamanho == faixas.length) {
@@ -39,6 +26,11 @@ public class Playlist implements Agregado<Faixa> {
     }
 
     /** Ordem aleatória, sem alterar a ordem da playlist. */
+    public Iterador<Faixa> criarIteradorEmbaralhado() {
+        return criarIteradorEmbaralhado(new Random());
+    }
+
+    /** Versão com Random injetável (permite ordem determinística em testes). */
     public Iterador<Faixa> criarIteradorEmbaralhado(Random random) {
         return new IteradorEmbaralhado<>(faixas, tamanho, random);
     }

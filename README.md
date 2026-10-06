@@ -4,7 +4,7 @@ Projeto Maven / Java 17 com duas versões do app de música:
 
 | Pasta | Conteúdo |
 |---|---|
-| [`antes/`](antes) | Versão com o anti-pattern: `getFaixas()` expõe a lista interna e cada cliente faz o próprio laço por índice |
+| [`antes/`](antes) | Projeto original fornecido (`projeto_iterator_antipattern.zip`), sem alterações |
 | [`depois/`](depois) | Versão refatorada com o padrão Iterator, com testes JUnit 5 |
 
 ```bash
@@ -40,36 +40,48 @@ O `ResultSet` já é, na essência, um cursor/iterador (`next()`). Envolvê-lo n
 
 ## Exercício 2 — Rastreando o anti-pattern
 
-> **Observação:** o ambiente usado para preparar a entrega não conseguiu acessar `designpatterns.venson.dev` (bloqueio de rede), por isso a pasta `antes/` é uma **reconstrução fiel ao enunciado**: mesmo pacote (`br.venson.net.designpatterns.iterator`), `Playlist.getFaixas()` devolvendo a lista interna, `Player.tocarEmbaralhado` alterando a ordem e o laço por índice repetido em `Player`, `Recomendador` e `RelatorioPlaylist`.
+A pasta [`antes/`](antes) contém o projeto original, sem modificações.
 
 ### 1. Consequências de `getFaixas()` devolver a lista interna
 
-- **Quebra de encapsulamento:** qualquer cliente pode chamar `add`, `remove`, `clear`, `set`, `sort` ou `shuffle` diretamente na lista, sem passar por `Playlist`. A playlist perde o controle das próprias invariantes (validações, limite de faixas, eventos de "playlist alterada" etc.).
-- **Aliasing / efeitos colaterais:** todos os clientes compartilham a mesma instância, então uma alteração feita por um afeta todos os outros, como acontece no item 2.
-- **Acoplamento à implementação:** o tipo de retorno `List<Faixa>` e o acesso `get(i)` amarram os clientes a uma estrutura indexável.
+```java
+// Expoe a estrutura interna: devolve a propria lista, nao uma copia.
+public List<Faixa> getFaixas() { return faixas; }
+```
 
-Clientes que passam a depender da estrutura: **`Player`** (`tocarTudo` e `tocarEmbaralhado`), **`Recomendador`** (`sugerirFavoritas`), **`RelatorioPlaylist`** (`gerar`) e o próprio **`Main`**, que imprime `getFaixas()`.
+- **Quebra de encapsulamento:** qualquer cliente pode chamar `add`, `remove`, `clear`, `set`, `sort` ou `shuffle` direto na lista, sem passar por `Playlist`. O método `adicionar` deixa de ser a única porta de entrada, e a playlist perde o controle das próprias invariantes (validações, limite de faixas, eventos de "playlist alterada" etc.).
+- **Aliasing / efeitos colaterais:** todos os clientes compartilham a mesma instância, então uma alteração feita por um afeta todos os outros, como acontece no item 2.
+- **Acoplamento à implementação:** o tipo de retorno `List<Faixa>` e o acesso `size()`/`get(i)` amarram os clientes a uma estrutura indexável em memória.
+
+Clientes que passam a depender da estrutura:
+- **`Player`**: `tocarTudo` e `tocarEmbaralhado` fazem `get(i)` e `Collections.shuffle`;
+- **`Recomendador`**: `sugerirFavoritas`;
+- **`RelatorioPlaylist`**: `resumo` usa `get(i)` e `size()`;
+- **`Main`**: imprime `playlist.getFaixas()` duas vezes.
 
 ### 2. Por que a ordem original mudou depois de `tocarEmbaralhado`?
 
-Saída do `Main` (antes):
+Saída do `Main` original:
 
 ```
-Ordem original:              [Tempo Perdido, Primeiros Erros, Lanterna dos Afogados, Pro Dia Nascer Feliz, Exagerado]
-Ordem depois do embaralhado: [Primeiros Erros, Lanterna dos Afogados, Pro Dia Nascer Feliz, Exagerado, Tempo Perdido]
+Ordem original: [Faixa A - Artista X, Faixa B - Artista Y, Faixa C - Artista Z]
+Tocando (shuffle): Faixa C - Artista Z
+Tocando (shuffle): Faixa A - Artista X
+Tocando (shuffle): Faixa B - Artista Y
+Ordem depois do shuffle: [Faixa C - Artista Z, Faixa A - Artista X, Faixa B - Artista Y]
 ```
 
-`tocarEmbaralhado` chama `Collections.shuffle(playlist.getFaixas())`. Como `getFaixas()` devolve **a própria referência** da lista interna (não uma cópia), o `shuffle` reordena *in place* o estado da `Playlist`. Uma operação que deveria ser só uma **forma de leitura** ("tocar em ordem aleatória") virou uma **escrita** no agregado. Por isso o `Recomendador` e o `RelatorioPlaylist`, que rodam depois, já veem a ordem embaralhada.
+`tocarEmbaralhado` faz `Collections.shuffle(playlist.getFaixas())`. Como `getFaixas()` devolve **a própria referência** da lista interna (não uma cópia), o `shuffle` reordena *in place* o estado da `Playlist`. Uma operação que deveria ser só uma **forma de leitura** ("tocar em ordem aleatória") virou uma **escrita** no agregado. Qualquer cliente executado depois (tocar tudo, relatório, recomendador) passa a ver a ordem embaralhada, e a ordem criada pelo usuário se perde. Como o `shuffle` não tem semente, a ordem final ainda muda a cada execução.
 
 ### 3. E se a `Playlist` trocar a estrutura interna?
 
-Os três clientes fazem `for (int i = 0; i < faixas.size(); i++) faixas.get(i)`. Se a playlist passar a usar:
+Os três clientes repetem `for (int i = 0; i < faixas.size(); i++) faixas.get(i)` (o `Player` repete duas vezes). Se a playlist passar a usar:
 
-- **array** (`Faixa[]`): `getFaixas()` muda de tipo, e `size()`/`get(i)` deixam de existir. **Quebram os 3 clientes + o `Main`**;
-- **lista ligada**: compila, mas `get(i)` vira O(n) e o laço inteiro vira **O(n²)**: quebra silenciosa de desempenho em 3 pontos;
-- **páginas** (carregamento sob demanda): não existe "uma lista" para devolver. Quebram os 3 clientes, e a própria assinatura de `getFaixas()` deixa de fazer sentido.
+- **array** (`Faixa[]`): `getFaixas()` muda de tipo, e `size()`/`get(i)` deixam de existir. **Quebram os 3 clientes e o `Main`**. O `Collections.shuffle` do `Player` também deixa de compilar;
+- **lista ligada**: compila, mas `get(i)` vira O(n) e cada laço vira **O(n²)**. É uma quebra silenciosa de desempenho em 4 laços;
+- **páginas** (carregamento sob demanda): não existe "uma lista" para devolver. Quebram os 3 clientes, o `Main` e a própria assinatura de `getFaixas()`.
 
-Ou seja, **no mínimo 4 pontos** (3 clientes + `Main`), além do próprio `getFaixas()`. Uma mudança que deveria ficar *dentro* de `Playlist` vaza para todo o sistema.
+Ou seja, **4 pontos quebram** (`Player`, `Recomendador`, `RelatorioPlaylist` e `Main`), com 4 laços para reescrever, além do próprio `getFaixas()`. Uma mudança que deveria ficar *dentro* de `Playlist` vaza para todo o sistema.
 
 ### 4. Refatoração com Iterator
 
@@ -78,10 +90,10 @@ Ou seja, **no mínimo 4 pontos** (3 clientes + `Main`), além do próprio `getFa
 | **Interface de iterador** | `Iterador<T>` com `temProxima()` e `proxima()` |
 | **Interface de agregado** | `Agregado<T>` com `criarIterador()` |
 | **Iteradores concretos (guardam a posição)** | `IteradorSequencial` (índice `posicao`), `IteradorEmbaralhado` (permutação própria de índices + `posicao`), `IteradorFiltrado` (decorador com *lookahead*) |
-| **Agregado concreto** | `Playlist`: guarda as faixas num **array privado** (trocado de `List` de propósito, para provar que a estrutura ficou escondida) e cria os iteradores com `criarIterador()`, `criarIteradorEmbaralhado(Random)` e `criarIteradorFavoritas()` |
-| **Clientes** | `Player.tocar(Iterador<Faixa>)`, `Recomendador`, `RelatorioPlaylist`, que só conhecem `Iterador` |
+| **Agregado concreto** | `Playlist`: guarda as faixas num **array privado** (trocado de `List` de propósito, para provar que a estrutura ficou escondida) e cria os iteradores com `criarIterador()`, `criarIteradorEmbaralhado()` e `criarIteradorFavoritas()` |
+| **Clientes** | `Player`, `Recomendador`, `RelatorioPlaylist`, que só conhecem `Iterador` |
 
-`getFaixas()` **deixou de existir**.
+`getFaixas()` **deixou de existir**. `Faixa` não foi alterada, e os clientes mantêm os mesmos métodos públicos (`tocarTudo`, `tocarEmbaralhado`, `sugerirFavoritas`, `resumo`).
 
 #### Diagrama de classes — ANTES
 
@@ -95,27 +107,28 @@ classDiagram
         -boolean favorita
     }
     class Playlist {
-        -String nome
         -List~Faixa~ faixas
         +adicionar(Faixa)
         +getFaixas() List~Faixa~
     }
     class Player {
         +tocarTudo(Playlist)
-        +tocarEmbaralhado(Playlist, Random)
+        +tocarEmbaralhado(Playlist)
     }
     class Recomendador {
-        +sugerirFavoritas(Playlist) List~Faixa~
+        +sugerirFavoritas(Playlist)
     }
     class RelatorioPlaylist {
-        +gerar(Playlist) String
+        +resumo(Playlist)
     }
+    class Main
     note for Playlist "getFaixas() devolve a lista interna"
     note for Player "for por índice + Collections.shuffle na lista interna"
     Playlist o-- Faixa
     Player ..> Playlist : getFaixas().get(i)
     Recomendador ..> Playlist : getFaixas().get(i)
     RelatorioPlaylist ..> Playlist : getFaixas().get(i)
+    Main ..> Playlist : getFaixas()
 ```
 
 #### Diagrama de classes — DEPOIS
@@ -133,11 +146,11 @@ classDiagram
         +criarIterador() Iterador~T~
     }
     class Playlist {
-        -String nome
         -Faixa[] faixas
         -int tamanho
         +adicionar(Faixa)
         +criarIterador() Iterador~Faixa~
+        +criarIteradorEmbaralhado() Iterador~Faixa~
         +criarIteradorEmbaralhado(Random) Iterador~Faixa~
         +criarIteradorFavoritas() Iterador~Faixa~
     }
@@ -156,13 +169,15 @@ classDiagram
         -T proximo
     }
     class Player {
-        +tocar(Iterador~Faixa~)
+        +tocarTudo(Playlist)
+        +tocarEmbaralhado(Playlist)
+        +tocar(Iterador~Faixa~, String)
     }
     class Recomendador {
-        +sugerirFavoritas(Playlist) List~Faixa~
+        +sugerirFavoritas(Playlist)
     }
     class RelatorioPlaylist {
-        +gerar(Playlist) String
+        +resumo(Playlist)
     }
     Agregado <|.. Playlist
     Iterador <|.. IteradorSequencial
@@ -201,27 +216,44 @@ public class Playlist implements Agregado<Faixa> {
     private Faixa[] faixas = new Faixa[4];           // estrutura privada
     private int tamanho = 0;
 
-    public Iterador<Faixa> criarIterador()                       { return new IteradorSequencial<>(faixas, tamanho); }
-    public Iterador<Faixa> criarIteradorEmbaralhado(Random r)    { return new IteradorEmbaralhado<>(faixas, tamanho, r); }
-    public Iterador<Faixa> criarIteradorFavoritas()              { return new IteradorFiltrado<>(criarIterador(), Faixa::isFavorita); }
+    public Iterador<Faixa> criarIterador()                    { return new IteradorSequencial<>(faixas, tamanho); }
+    public Iterador<Faixa> criarIteradorEmbaralhado(Random r) { return new IteradorEmbaralhado<>(faixas, tamanho, r); }
+    public Iterador<Faixa> criarIteradorFavoritas()           { return new IteradorFiltrado<>(criarIterador(), Faixa::isFavorita); }
 }
 
 public class Player {
-    public void tocar(Iterador<Faixa> faixas) {      // um único laço para qualquer ordem
-        while (faixas.temProxima()) System.out.println("  > Tocando: " + faixas.proxima());
+    public void tocarTudo(Playlist p)        { tocar(p.criarIterador(), "Tocando: "); }
+    public void tocarEmbaralhado(Playlist p) { tocar(p.criarIteradorEmbaralhado(), "Tocando (shuffle): "); }
+
+    public void tocar(Iterador<Faixa> faixas, String rotulo) {   // um único laço para qualquer ordem
+        while (faixas.temProxima()) System.out.println(rotulo + faixas.proxima());
     }
 }
 ```
 
+Saída do `Main` refatorado:
+
+```
+Total de faixas: 3 | duracao: 10 min
+Favoritas:
+  * Faixa A - Artista X
+  * Faixa C - Artista Z
+Ordem original: [Faixa A - Artista X, Faixa B - Artista Y, Faixa C - Artista Z]
+Tocando (shuffle): Faixa C - Artista Z
+Tocando (shuffle): Faixa A - Artista X
+Tocando (shuffle): Faixa B - Artista Y
+Ordem depois do shuffle: [Faixa A - Artista X, Faixa B - Artista Y, Faixa C - Artista Z]   <- preservada
+```
+
 ### 5. Novas travessias sem duplicar laços e sem expor a estrutura
 
-- **O laço existe uma vez só.** `Player.tocar` percorre *qualquer* `Iterador<Faixa>`. Tocar em ordem, embaralhado ou só as favoritas é só passar outro iterador: `player.tocar(playlist.criarIteradorEmbaralhado(random))`.
-- **A ordem é responsabilidade do iterador, não da coleção.** `IteradorEmbaralhado` embaralha uma **permutação de índices própria** (Fisher-Yates), então a playlist nunca é alterada. Na saída do `Main` refatorado a ordem continua a mesma depois do embaralhado, e o teste `embaralhadoVisitaTodasSemAlterarAPlaylist` comprova isso.
+- **O laço existe uma vez só.** `Player.tocar` percorre *qualquer* `Iterador<Faixa>`. Tocar em ordem, embaralhado ou só as favoritas é só passar outro iterador.
+- **A ordem é responsabilidade do iterador, não da coleção.** `IteradorEmbaralhado` embaralha uma **permutação de índices própria** (Fisher-Yates), então a playlist nunca é alterada. A saída acima mostra a mesma ordem antes e depois do shuffle, e o teste `embaralhadoVisitaTodasSemAlterarAPlaylist` comprova isso.
 - **Travessias se combinam.** `IteradorFiltrado` é um decorador sobre qualquer iterador. "Favoritas" é `filtro(sequencial)`, e "favoritas embaralhadas" é `filtro(embaralhado)`, sem uma linha de laço nova:
   ```java
-  player.tocar(new IteradorFiltrado<>(playlist.criarIteradorEmbaralhado(new Random(7)), Faixa::isFavorita));
+  player.tocar(new IteradorFiltrado<>(playlist.criarIteradorEmbaralhado(), Faixa::isFavorita), "Tocando (favoritas shuffle): ");
   ```
-- **A estrutura pode mudar à vontade.** A `Playlist` refatorada já usa um array no lugar da `List` do projeto original e **nenhum cliente percebeu**. Trocar por lista ligada ou páginas exigiria mexer só na `Playlist` e nos iteradores (que são *package-private*), nunca em `Player`, `Recomendador` ou `RelatorioPlaylist`.
+- **A estrutura pode mudar à vontade.** A `Playlist` refatorada já usa um array no lugar da `List` original e **nenhum cliente percebeu**. Trocar por lista ligada ou páginas exigiria mexer só na `Playlist` e nos iteradores (que são *package-private*), nunca em `Player`, `Recomendador` ou `RelatorioPlaylist`.
 - **Cada iterador tem estado próprio**, então duas travessias simultâneas não interferem uma na outra (teste `iteradoresSaoIndependentes`).
 
 ---
@@ -234,10 +266,12 @@ public class Player {
 
 **Iteradores concretos *package-private*, criados pela `Playlist`.** Só a `Playlist` conhece o array interno, e só ela pode entregá-lo aos iteradores. Os clientes recebem a interface `Iterador`, nunca a classe concreta nem a estrutura. É isso que permite trocar `List` por array, como foi feito, sem impacto externo.
 
-**Cada iterador guarda a própria posição.** O estado da travessia (`posicao`, `ordem`) mora no iterador, e não na coleção. Por isso há várias travessias independentes e simultâneas, e a coleção continua imutável do ponto de vista de quem percorre.
+**Cada iterador guarda a própria posição.** O estado da travessia (`posicao`, `ordem`) mora no iterador, e não na coleção. Por isso há várias travessias independentes e simultâneas, e a coleção continua intacta para quem só percorre.
 
-**Embaralhar índices, e não a coleção.** `IteradorEmbaralhado` aplica Fisher-Yates num `int[]` próprio: O(n) em tempo e memória, distribuição uniforme e nenhum efeito colateral. O `Random` é injetado, o que torna a travessia **determinística em testes** (semente fixa) e aleatória em produção.
+**Embaralhar índices, e não a coleção.** `IteradorEmbaralhado` aplica Fisher-Yates num `int[]` próprio: O(n) em tempo e memória, distribuição uniforme e nenhum efeito colateral. Existe uma versão com `Random` injetável, que torna a travessia **determinística em testes e na demonstração do `Main`** (semente fixa), enquanto `criarIteradorEmbaralhado()` sem argumentos continua aleatória como no original.
 
 **`IteradorFiltrado` como decorador.** Em vez de um "iterador de favoritas" com laço próprio, um único decorador genérico com `Predicate` resolve *qualquer* filtro (favoritas, por artista, por duração) e se compõe com *qualquer* ordem. Novas travessias passam a ser combinações, não código novo duplicado.
+
+**Mesma API pública para os clientes.** `tocarTudo`, `tocarEmbaralhado`, `sugerirFavoritas` e `resumo` mantêm as assinaturas e as mensagens do original. A refatoração muda *como* a travessia acontece, não *o que* o sistema faz.
 
 **Testes como evidência.** `PlaylistIteradorTest` cobre a ordem sequencial (incluindo o crescimento do array além da capacidade inicial), o embaralhamento sem efeito colateral, o filtro, a independência entre iteradores e o contrato de exceção.

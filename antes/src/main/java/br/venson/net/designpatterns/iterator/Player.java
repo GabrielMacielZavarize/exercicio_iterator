@@ -1,24 +1,23 @@
 package br.venson.net.designpatterns.iterator;
 
-import java.util.Collections;
 import java.util.List;
-import java.util.Random;
+import java.util.Collections;
 
 public class Player {
 
     public void tocarTudo(Playlist playlist) {
         List<Faixa> faixas = playlist.getFaixas();
         for (int i = 0; i < faixas.size(); i++) {
-            System.out.println("  > Tocando: " + faixas.get(i));
+            System.out.println("Tocando: " + faixas.get(i));
         }
     }
 
-    // ANTI-PATTERN: embaralha a lista interna da playlist (efeito colateral).
-    public void tocarEmbaralhado(Playlist playlist, Random random) {
+    public void tocarEmbaralhado(Playlist playlist) {
+        // Opera direto sobre a lista interna da playlist.
         List<Faixa> faixas = playlist.getFaixas();
-        Collections.shuffle(faixas, random);
+        Collections.shuffle(faixas);
         for (int i = 0; i < faixas.size(); i++) {
-            System.out.println("  > Tocando: " + faixas.get(i));
+            System.out.println("Tocando (shuffle): " + faixas.get(i));
         }
     }
 }

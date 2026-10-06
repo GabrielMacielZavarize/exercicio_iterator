@@ -1,16 +1,12 @@
 package br.venson.net.designpatterns.iterator;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class Recomendador {
 
-    public List<Faixa> sugerirFavoritas(Playlist playlist) {
-        List<Faixa> sugestoes = new ArrayList<>();
+    public void sugerirFavoritas(Playlist playlist) {
+        System.out.println("Favoritas:");
         Iterador<Faixa> favoritas = playlist.criarIteradorFavoritas();
         while (favoritas.temProxima()) {
-            sugestoes.add(favoritas.proxima());
+            System.out.println("  * " + favoritas.proxima());
         }
-        return sugestoes;
     }
 }
